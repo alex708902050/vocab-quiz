@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>生词大师 · 全功能测验版</title>
+<style>
+:root{--bg1:#eef2ff;--bg2:#e0f2fe;--bg3:#ecfdf5;--card:rgba(255,255,255,.9);--text:#0f172a;--muted:#475569;--green:#b6f5b6;--red:#f9c0c0;--border:#e2e8f0}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;background:linear-gradient(135deg,var(--bg1),var(--bg2) 40%,var(--bg3));color:var(--text)}
+.container{max-width:1000px;margin:0 auto;padding:24px}
+.header{display:flex;gap:16px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;margin-bottom:16px}
+h1{margin:0;font-size:22px}.sub{color:var(--muted);font-size:14px}.row{display:flex;gap:8px;flex-wrap:wrap}
+button,.btn{cursor:pointer;border:none;border-radius:12px;padding:10px 14px;background:#0f172a;color:#fff}
+.ghost{background:#fff;color:var(--text);border:1px solid var(--border)}.danger{background:#fff;color:#b91c1c;border:1px solid #fecaca}
+.card{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:20px;box-shadow:0 8px 24px rgba(2,6,23,.06);backdrop-filter:blur(6px)}
+.label{font-size:14px;color:var(--muted);margin-bottom:6px}
+.chip{display:inline-flex;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid var(--border);background:#fff;color:var(--muted)}
+.choices{display:grid;grid-template-columns:1fr;gap:10px;margin-top:8px}@media (min-width:640px){.choices{grid-template-columns:1fr 1fr}}
+.choice{border:1px solid var(--border);border-radius:16px;padding:12px;text-align:left;background:#fff;transition:.15s;color:#111 !important;font-weight:normal}
+.choice.correct{background:var(--green)!important;color:#111 !important;font-weight:700!important font-weight: 700 !important; }
+.choice.wrong{background:var(--red)!important;color:#111 !important;font-weight:normal!important}
+mark{background:#fef08a;border-radius:4px;padding:0 3px}
+.muted{color:var(--muted);font-size:12px}
+table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;font-size:13px}th{background:#f8fafc;color:var(--muted);font-weight:600}
+.hidden{display:none}
+
+* { -webkit-tap-highlight-color: transparent; }
+button, .btn, .choice { touch-action: manipulation; }
+@media (max-width: 480px) {
+  .choice { min-height: 48px; font-size: 16px; }
+  button, .btn { padding: 12px 16px; border-radius: 14px; }
+  #wordText { font-size: 26px; }
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js">
+document.getElementById('exportDataBtn').addEventListener('click',()=>{
+  try{
+    const blob=new Blob([JSON.stringify({data},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='vocab-quiz-dataset.json';
+    a.click(); URL.revokeObjectURL(url);
+  }catch(err){ alert('导出失败：'+(err&&err.message?err.message:err)); }
+});
+
+
+function updateOnboard(){
+  try{
+    const ob=document.getElementById('onboard');
+    if(!ob) return;
+    if(Array.isArray(data) && data.length>0){ ob.classList.add('hidden'); }
+    else { ob.classList.remove('hidden'); }
+  }catch{}
+}
+async function importFromClipboard(){
+  try{
+    if(!navigator.clipboard) return alert('此浏览器不支持读取剪贴板，请使用“粘贴导入”。');
+    const text = await navigator.clipboard.readText();
+    if(!text) return alert('剪贴板为空：请先复制 JSON 内容。');
+    let rows=[]; try{ const obj=JSON.parse(text); if(Array.isArray(obj)) rows=obj.data||obj; }catch{}
+    if(!rows.length){
+      const lines=text.split(/\r?\n/).filter(Boolean);
+      if(lines.length){
+        const header=lines[0].split(',');
+        const idx=k=>header.findIndex(h=>h.trim().toLowerCase()===k);
+        const w=idx('word'),m=idx('meaning'),e=idx('example'),p=idx('pos'),s=idx('source');
+        rows=lines.slice(1).map(line=>{ const cols=line.split(','); return {word:cols[w]||'', meaning:cols[m]||'', example:cols[e]||'', pos:cols[p]||'', source:cols[s]||''}; });
+      }
+    }
+    const parsed=mapColumns(rows);
+    if(!parsed.length) return alert('未能从剪贴板解析到题库：请确认复制的是 JSON/CSV。');
+    mergeData(parsed);
+    alert('成功导入 '+parsed.length+' 条。');
+    updateOnboard();
+  }catch(err){
+    alert('读取剪贴板失败：' + (err && err.message ? err.message : err));
+  }
+}
+document.addEventListener('click',(e)=>{
+  if(e.target && e.target.id==='clipImportBtn'){ importFromClipboard(); }
+  if(e.target && e.target.id==='openPasteBtn'){ document.getElementById('pasteImportBtn').click(); }
+});
+
+</script>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div><h1>生词大师 · 全功能测验版</h1><div class="sub">随机出题 · 错题本 · 连对隐藏 · Excel/JSON/CSV 上传 · 本地保存 · Enter 跳下一题</div></div>
+    <div class="row">
+      <div class="chip" id="wrongCountChip">错题本：0</div>
+      <button id="nextBtn">下一题（Enter）</button>
+    </div>
+  </div>
+
+  
+  <div id="onboard" class="card hidden" style="margin-top:16px;border:1px dashed var(--border)">
+    <div style="display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap">
+      <div>
+        <div class="label">首次使用提示</div>
+        <div>未检测到本机题库。你可以：</div>
+        <ul style="margin:8px 0 0 18px;padding:0">
+          <li>点击 <strong>“粘贴导入（JSON/CSV）”</strong>，把电脑导出的 <code>vocab-quiz-dataset.json</code> 内容粘贴进来；或</li>
+          <li>点右侧按钮 <strong>“从剪贴板导入（JSON）”</strong>（需要允许读取剪贴板）。</li>
+        </ul>
+      </div>
+      <div class="row">
+        <button class="btn ghost" id="clipImportBtn">从剪贴板导入（JSON）</button>
+        <button class="btn" id="openPasteBtn">打开“粘贴导入”</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">题库与进度</div>
+    <div class="row" style="gap:10px;flex-wrap:wrap">
+      <label class="btn ghost" for="excelInput">导入 Excel（.xlsx）</label>
+      <input id="excelInput" type="file" accept=".xlsx" style="display:none"/>
+      <button class="btn ghost" id="pasteImportBtn">粘贴导入（JSON/CSV）</button>
+      <button class="btn ghost" id="importProgressBtn">导入进度（JSON）</button>
+      <button class="btn ghost" id="exportProgressBtn">导出进度</button>
+      <button class="btn ghost" id="exportDataBtn">导出题库（JSON）</button>
+      <button class="btn danger" id="resetProgressBtn">清空进度</button>
+    </div>
+    <div class="muted" id="metaLine">当前题库：0 个；可出题：0 个；错题本：0 个</div>
+    <div class="muted">PC 上传 Excel → 点击“导出题库（JSON）” → 手机端点“粘贴导入（JSON/CSV）”。</div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div><div class="muted" id="posText">词性</div><div id="wordText" style="font-size:28px;font-weight:700">（请先导入题库）</div></div>
+      <div id="statBox" class="chip">答题 0 ｜ 错误 0 ｜ 错误率 0% ｜ 连对 0</div>
+    </div>
+    <div class="choices" id="choices"></div>
+    <div id="analysis" class="muted" style="margin-top:8px"></div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <button class="btn" id="modeAll">全部</button>
+      <button class="btn ghost" id="modeWrong">只做错题本</button>
+      <div class="chip">连对隐藏阈值：<input id="streakInput" type="number" min="1" max="50" value="10" style="width:64px;margin-left:6px;border:1px solid var(--border);border-radius:8px;padding:4px"/></div>
+    </div>
+    <div class="label" style="margin-top:8px">错题本与统计</div>
+    <div class="muted">按错误率从高到低排序，优先最近出现。</div>
+    <div style="overflow:auto;max-height:360px;border:1px solid var(--border);border-radius:16px;margin-top:8px">
+      <table id="statsTable"><thead><tr><th>单词</th><th>释义</th><th>答题</th><th>错误</th><th>错误率</th><th>连续正确</th><th>状态</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+  <div class="muted" style="text-align:center;margin-top:16px">提示：Enter 可触发“下一题”。进度保存在本地浏览器。</div>
+</div>
+
+<script>
+// ---------- Storage & Data ----------
+const LS_DATA_KEY="vquiz:data", LS_STATS_KEY="vquiz:stats", LS_SETTINGS_KEY="vquiz:settings";
+let data=[], stats={}, settings={hideAfterStreak:10, mode:"all"}; // mode: 'all' | 'wrong'
+
+// ---------- Helpers ----------
+const npos = s => (s||"").trim().toLowerCase();
+const valid = s => typeof s==="string" && s.trim().length>0;
+function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function wrongRateFor(w){ const s=stats[w]; return !s||!s.attempts?0:s.wrong/s.attempts; }
+function saveAll(){ localStorage.setItem(LS_DATA_KEY, JSON.stringify(data)); localStorage.setItem(LS_STATS_KEY, JSON.stringify(stats)); localStorage.setItem(LS_SETTINGS_KEY, JSON.stringify(settings)); renderMeta(); renderStatsTable(); updateOnboard(); }
+
+// ---------- Render Meta & Table ----------
+function getPool(){
+  const base = data.filter(it=>{ const s=stats[it.word]; return !s || s.streak < (settings.hideAfterStreak||10); });
+  return settings.mode==="wrong" ? base.filter(it => (stats[it.word]?.wrong||0)>0) : base;
+}
+function renderMeta(){
+  const p=getPool(); const wrongCount=data.filter(d=>(stats[d.word]?.wrong||0)>0).length;
+  document.getElementById('metaLine').textContent = `当前题库：${data.length} 个；可出题：${p.length} 个；错题本：${wrongCount} 个`;
+  document.getElementById('wrongCountChip').textContent = `错题本：${wrongCount}`;
+}
+function renderStatsTable(){
+  const tbody=document.querySelector('#statsTable tbody'); tbody.innerHTML='';
+  const rows = data.map(item=>{
+    const s=stats[item.word]||{attempts:0,wrong:0,streak:0};
+    return {word:item.word,pos:item.pos,meaning:item.meaning,attempts:s.attempts,wrong:s.wrong,wrongRate:s.attempts? s.wrong/s.attempts:0,streak:s.streak,hidden:s.streak>=(settings.hideAfterStreak||10),lastSeen:s.lastSeen||0};
+  }).sort((a,b)=> b.wrongRate!==a.wrongRate? b.wrongRate-a.wrongRate : b.lastSeen-a.lastSeen);
+  for(const r of rows){
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td><strong>${r.word}</strong> ${r.pos?`<span class="muted">(${r.pos})</span>`:''}</td>
+    <td>${r.meaning||''}</td><td>${r.attempts||0}</td>
+    <td style="color:#b91c1c">${r.wrong||0}</td><td>${Math.round(r.wrongRate*100)}%</td>
+    <td style="color:#047857">${r.streak||0}</td><td class="muted">${r.hidden?'✅ 已隐藏':'可出题'}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+// ---------- Import / Export ----------
+function mapColumns(rows){
+  const norm = k => (k||'').toString().replace(/\s+/g,'').toLowerCase();
+  const c = {word:['word','单词'], pos:['pos','词性'], meaning:['meaning','中文含义（句子中）','中文含义','释义','中文义'], example:['example','ppt中原文引用（生词加粗）','原文引用','例句','ppt中原文引用（生词加粗）'], source:['source','来源']};
+  const pick = (obj, list) => { for(const k of Object.keys(obj)){ if(list.map(norm).includes(norm(k))) return obj[k]; } return ''; };
+  return rows.map(r=>({word:String(pick(r,c.word)||'').trim(), pos:String(pick(r,c.pos)||'').trim(), meaning:String(pick(r,c.meaning)||'').trim(), example:String(pick(r,c.example)||'').trim(), source:String(pick(r,c.source)||'').trim()})).filter(v=>v.word && v.meaning);
+}
+function mergeData(imported){
+  const map=new Map(data.map(d=>[d.word,d]));
+  for(const row of imported){ if(!row.word||!row.meaning) continue; const prev=map.get(row.word)||{}; map.set(row.word,Object.assign({},prev,row)); }
+  data=Array.from(map.values()); saveAll(); ensureQuestion();
+}
+document.getElementById('excelInput').addEventListener('change', e=>{
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const reader=new FileReader();
+  reader.onload=()=>{ try{
+      const arr=new Uint8Array(reader.result);
+      const wb=XLSX.read(arr,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]]; const json=XLSX.utils.sheet_to_json(ws,{defval:''});
+      const parsed=mapColumns(json);
+      if(!parsed.length){ alert('Excel 解析为空：请检查列名。'); return; }
+      mergeData(parsed); alert('成功导入 '+parsed.length+' 条。');
+    }catch(err){ console.error(err); alert('解析 Excel 失败。'); }
+    e.target.value='';
+  };
+  reader.readAsArrayBuffer(f);
+});
+document.getElementById('pasteImportBtn').addEventListener('click',()=>{
+  const text=prompt('粘贴 JSON 数组或 CSV（逗号分隔，首行为表头）'); if(!text) return;
+  let rows=[]; try{ const obj=JSON.parse(text); if(Array.isArray(obj)) rows=obj; }catch{}
+  if(!rows.length){ const lines=text.split(/\r?\n/).filter(Boolean); if(lines.length){ const header=lines[0].split(','); const idx=k=>header.findIndex(h=>h.trim().toLowerCase()===k); const w=idx('word'),m=idx('meaning'),e=idx('example'),p=idx('pos'),s=idx('source'); rows=lines.slice(1).map(line=>{ const cols=line.split(','); return {word:cols[w]||'', meaning:cols[m]||'', example:cols[e]||'', pos:cols[p]||'', source:cols[s]||''}; }); } }
+  const parsed=mapColumns(rows); if(!parsed.length) return alert('粘贴内容无法解析：请包含 word/meaning。'); mergeData(parsed); alert('成功导入 '+parsed.length+' 条。');
+});
+document.getElementById('importProgressBtn').addEventListener('click',()=>{
+  const text=prompt('粘贴导出的进度 JSON：'); if(!text) return;
+  try{ const obj=JSON.parse(text); if(obj&&obj.stats){ stats=obj.stats; settings=Object.assign(settings, obj.settings||{}); saveAll(); alert('进度已导入。'); } else alert('格式不对。'); }catch{ alert('解析失败：请粘贴导出的进度 JSON。'); }
+});
+document.getElementById('exportProgressBtn').addEventListener('click',()=>{
+  const blob=new Blob([JSON.stringify({stats,settings},null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='vocab-quiz-progress.json'; a.click(); URL.revokeObjectURL(url);
+});
+document.getElementById('resetProgressBtn').addEventListener('click',()=>{ if(!confirm('确定清空所有学习进度？')) return; stats={}; saveAll(); ensureQuestion(); });
+
+document.getElementById('modeAll').addEventListener('click',()=>{ settings.mode='all'; saveAll(); document.getElementById('modeAll').className='btn'; document.getElementById('modeWrong').className='btn ghost'; });
+document.getElementById('modeWrong').addEventListener('click',()=>{ settings.mode='wrong'; saveAll(); document.getElementById('modeAll').className='btn ghost'; document.getElementById('modeWrong').className='btn'; });
+document.getElementById('streakInput').addEventListener('change',e=>{ const n=Math.max(1,Number(e.target.value||10)); settings.hideAfterStreak=n; saveAll(); });
+
+// ---------- Question Loop (robust) ----------
+let curIndex=null, answerIdx=null, locked=false;
+function ensureQuestion(){ if(curIndex===null) nextQuestion(); }
+function buildWeightedPool(){
+  const base = getPool();
+  const weighted=[];
+  for(const item of base){
+    const s=stats[item.word]||{attempts:0,wrong:0,streak:0};
+    const w = (s.wrong>0? 3: 1) + (s.attempts===0? 1: 0); // 错题权重更高，未做过略高
+    for(let i=0;i<w;i++) weighted.push(item);
+  }
+  return weighted.length? weighted: base;
+}
+function pickSamePosMeanings(target, need){
+  const same = data.filter(d=>d.word!==target.word && npos(d.pos)===npos(target.pos) && valid(d.meaning));
+  const others = data.filter(d=>d.word!==target.word && npos(d.pos)!==npos(target.pos) && valid(d.meaning));
+  const pool = same.length>=need ? shuffle(same).slice(0,need) : shuffle(same).concat(shuffle(others)).slice(0,need);
+  const set=new Set(), out=[];
+  for(const it of pool){ if(valid(it.meaning) && it.meaning!==target.meaning && !set.has(it.meaning)){ set.add(it.meaning); out.push(it.meaning); if(out.length===need) break; } }
+  return out;
+}
+function highlight(example, word){
+  if(!valid(example)) return "（此单词暂无例句）";
+  const safe = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); const re = new RegExp('(' + safe + ')','gi');
+  return '例句：' + example.split(re).map(p => re.test(p) ? '<mark>'+p+'</mark>' : p).join('');
+}
+function renderQuestion(item){
+  const correct = item.meaning;
+  let distractors = pickSamePosMeanings(item,3);
+  if(distractors.length<3){
+    const any = shuffle(data.filter(d=>d.word!==item.word && valid(d.meaning))).map(d=>d.meaning);
+    for(const m of any){ if(distractors.length<3 && m!==correct && !distractors.includes(m)) distractors.push(m); }
+  }
+  const opts = shuffle([correct].concat(distractors)).slice(0,4);
+  const unique = []; const used=new Set();
+  for(const m of opts){ if(valid(m) && !used.has(m)){ unique.push(m); used.add(m); } }
+  while(unique.length<4){
+    const any = data[Math.floor(Math.random()*data.length)];
+    if(any && valid(any.meaning) && !used.has(any.meaning) && any.meaning!==correct){ unique.push(any.meaning); used.add(any.meaning); } else break;
+  }
+  if(unique.length<4) return false;
+
+  const wordEl=document.getElementById('wordText'), posEl=document.getElementById('posText'), choicesEl=document.getElementById('choices'), statEl=document.getElementById('statBox'), analysis=document.getElementById('analysis');
+  wordEl.textContent=item.word; posEl.textContent=item.pos||'词性';
+  const s=stats[item.word]||{attempts:0,wrong:0,streak:0};
+  statEl.textContent=`答题 ${s.attempts} ｜ 错误 ${s.wrong} ｜ 错误率 ${Math.round(wrongRateFor(item.word)*100)}% ｜ 连对 ${s.streak}`;
+  analysis.innerHTML='';
+  choicesEl.innerHTML='';
+  unique.forEach((txt,i)=>{
+    const btn=document.createElement('button');
+    btn.className='choice'; btn.dataset.index=i; btn.textContent=txt;
+    choicesEl.appendChild(btn);
+  });
+  answerIdx = unique.indexOf(correct); if(answerIdx<0){ answerIdx=0; choicesEl.children[0].textContent=correct; }
+  return true;
+}
+function nextQuestion(){
+  locked=false;
+  const pool = buildWeightedPool();
+  const wordEl=document.getElementById('wordText'), posEl=document.getElementById('posText'), choicesEl=document.getElementById('choices'), analysis=document.getElementById('analysis'), statEl=document.getElementById('statBox');
+  if(!pool.length){ wordEl.textContent='（没有可出题的单词：请导入题库或降低连对阈值）'; posEl.textContent='词性'; choicesEl.innerHTML=''; analysis.textContent=''; statEl.textContent='答题 0 ｜ 错误 0 ｜ 错误率 0% ｜ 连对 0'; return; }
+  let tries=0, item=null;
+  while(tries<60){
+    const cand = pool[Math.floor(Math.random()*pool.length)];
+    if(valid(cand.meaning)){ item=cand; break; }
+    tries++;
+  }
+  if(!item){ wordEl.textContent='（题库存在空释义记录，请检查导入）'; return; }
+  curIndex = data.findIndex(x=>x.word===item.word);
+  renderQuestion(item);
+}
+function submitChoice(selectedIdx){
+  if(locked) return; locked=true;
+  const item = data[curIndex]; if(!item) return;
+  const isCorrect = (selectedIdx === answerIdx);
+  const s = stats[item.word] || {attempts:0,wrong:0,streak:0};
+  s.attempts += 1; if(isCorrect) s.streak += 1; else { s.wrong += 1; s.streak = 0; }
+  s.lastSeen = Date.now(); stats[item.word]=s; saveAll();
+  const choicesEl=document.getElementById('choices');
+  [...choicesEl.children].forEach((el,i)=>{
+  if (i === answerIdx) {
+    el.classList.add('correct');
+    el.style.fontWeight = '700'; // 确保加粗
+  } else if (i === selectedIdx) {
+    el.classList.add('wrong');
+  }
+});
+  const analysis=document.getElementById('analysis');
+  analysis.innerHTML = (isCorrect?'<span style="color:#047857">✔ 回答正确</span>':'<span style="color:#b91c1c">✘ 回答错误</span>')
+    + ` &nbsp; 正确释义：<strong>${choicesEl.children[answerIdx].textContent}</strong><br>`
+    + highlight(item.example||'', item.word)
+    + `<div style="margin-top:8px"><button id="goNext" class="btn">下一题（Enter）</button></div>`;
+}
+document.body.addEventListener('click', (e)=>{
+  const c = e.target.closest('.choice');
+  if(c && !locked){ const idx = Number(c.dataset.index); submitChoice(idx); }
+  if(e.target && e.target.id==='goNext'){ nextQuestion(); }
+});
+document.getElementById('nextBtn').addEventListener('click', nextQuestion);
+document.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ const go=document.getElementById('goNext'); if(go){ e.preventDefault(); nextQuestion(); } } });
+
+// ---------- Init ----------
+try{ const d=localStorage.getItem(LS_DATA_KEY); if(d) data=JSON.parse(d); }catch{}
+try{ const s=localStorage.getItem(LS_STATS_KEY); if(s) stats=JSON.parse(s); }catch{}
+try{ const t=localStorage.getItem(LS_SETTINGS_KEY); if(t) settings=JSON.parse(t); }catch{}
+renderMeta(); renderStatsTable(); updateOnboard(); nextQuestion();
+
+document.getElementById('exportDataBtn').addEventListener('click',()=>{
+  try{
+    const blob=new Blob([JSON.stringify({data},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='vocab-quiz-dataset.json';
+    a.click(); URL.revokeObjectURL(url);
+  }catch(err){ alert('导出失败：'+(err&&err.message?err.message:err)); }
+});
+
+
+function updateOnboard(){
+  try{
+    const ob=document.getElementById('onboard');
+    if(!ob) return;
+    if(Array.isArray(data) && data.length>0){ ob.classList.add('hidden'); }
+    else { ob.classList.remove('hidden'); }
+  }catch{}
+}
+async function importFromClipboard(){
+  try{
+    if(!navigator.clipboard) return alert('此浏览器不支持读取剪贴板，请使用“粘贴导入”。');
+    const text = await navigator.clipboard.readText();
+    if(!text) return alert('剪贴板为空：请先复制 JSON 内容。');
+    let rows=[]; try{ const obj=JSON.parse(text); if(Array.isArray(obj)) rows=obj.data||obj; }catch{}
+    if(!rows.length){
+      const lines=text.split(/\r?\n/).filter(Boolean);
+      if(lines.length){
+        const header=lines[0].split(',');
+        const idx=k=>header.findIndex(h=>h.trim().toLowerCase()===k);
+        const w=idx('word'),m=idx('meaning'),e=idx('example'),p=idx('pos'),s=idx('source');
+        rows=lines.slice(1).map(line=>{ const cols=line.split(','); return {word:cols[w]||'', meaning:cols[m]||'', example:cols[e]||'', pos:cols[p]||'', source:cols[s]||''}; });
+      }
+    }
+    const parsed=mapColumns(rows);
+    if(!parsed.length) return alert('未能从剪贴板解析到题库：请确认复制的是 JSON/CSV。');
+    mergeData(parsed);
+    alert('成功导入 '+parsed.length+' 条。');
+    updateOnboard();
+  }catch(err){
+    alert('读取剪贴板失败：' + (err && err.message ? err.message : err));
+  }
+}
+document.addEventListener('click',(e)=>{
+  if(e.target && e.target.id==='clipImportBtn'){ importFromClipboard(); }
+  if(e.target && e.target.id==='openPasteBtn'){ document.getElementById('pasteImportBtn').click(); }
+});
+
+</script>
+</body>
+</html>
