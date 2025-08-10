@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>VOCAB MASTER</title>
+<style>
+:root{
+  --bg:#fcfcfe;
+  --card:rgba(255,255,255,.96);
+  --text:#111827;
+  --muted:#6b7280;
+  --green:#d9f7d9;
+  --red:#ffdede;
+  --border:#f0e1ea;
+  --accent:#ff4d9d;      /* blackpink pink */
+  --accent-soft:#ffe6f1; /* soft pink surfaces */
+}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text)}
+.container{max-width:1000px;margin:0 auto;padding:24px}
+.header{display:flex;gap:16px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;margin-bottom:16px}
+h1{margin:0;font-size:32px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+button,.btn{cursor:pointer;border:none;border-radius:16px;padding:12px 16px;background:#111827;color:#fff;box-shadow:0 2px 6px rgba(2,6,23,.08)}
+.ghost{background:#fff;color:var(--text);border:1px solid var(--border)}
+.danger{background:#fff;color:#b91c1c;border:1px solid #fecaca}
+.card{background:var(--card);border:1px solid var(--border);border-radius:22px;padding:20px;box-shadow:0 8px 24px rgba(17,24,39,.06);backdrop-filter:blur(10px)}
+.label{font-size:14px;color:var(--muted);margin-bottom:6px}
+.chip{display:inline-flex;padding:8px 12px;border-radius:999px;font-size:12px;border:1px solid var(--border);background:var(--accent-soft);color:#a43c73}
+.choices{display:grid;grid-template-columns:1fr;gap:10px;margin-top:8px}
+@media (min-width:640px){.choices{grid-template-columns:1fr 1fr}}
+.choice{border:1px solid var(--border);border-radius:14px;padding:14px;text-align:left;background:#fff;transition:.15s;color:#111 !important;font-weight:400}
+.choice.correct{background:var(--green)!important;color:#111 !important;font-weight:700!important}
+.choice.wrong{background:var(--red)!important;color:#111 !important;font-weight:400!important}
+mark{background:#fef08a;border-radius:4px;padding:0 3px}
+.muted{color:var(--muted);font-size:12px}
+table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;font-size:13px}th{background:#f8fafc;color:var(--muted);font-weight:600}
+.hidden{display:none}
+* { -webkit-tap-highlight-color: transparent; }
+button, .btn, .choice { touch-action: manipulation; }
+@media (max-width: 480px) {
+  .choice { min-height: 48px; font-size: 16px; }
+  button, .btn { padding: 12px 16px; border-radius: 14px; }
+  #wordText { font-size: 26px; }
+}
+.progressline { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;}
+
+/* Watermark */
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  background-image:url('data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22520%22%20height%3D%22220%22%20viewBox%3D%220%200%20520%20220%22%3E%0A%20%20%3Cdefs%3E%3Cstyle%3E%0A%20%20%20%20.t%7Bfont%3A700%2024px%20-apple-system%2CBlinkMacSystemFont%2CSegoe%20UI%2CRoboto%2CHelvetica%2CArial%2C%22PingFang%20SC%22%2C%22Noto%20Sans%20SC%22%2C%22Microsoft%20YaHei%22%2Csans-serif%3B%20fill%3A%23111827%3B%20fill-opacity%3A0.06%7D%0A%20%20%3C/style%3E%3C/defs%3E%0A%20%20%3Cg%20transform%3D%22rotate%28-20%20260%20110%29%22%3E%0A%20%20%20%20%3Ctext%20x%3D%2240%22%20%20y%3D%2280%22%20%20class%3D%22t%22%3EALEXANDRA%20WINS%3C/text%3E%0A%20%20%20%20%3Ctext%20x%3D%22240%22%20y%3D%22160%22%20class%3D%22t%22%3EALEXANDRA%20WINS%3C/text%3E%0A%20%20%3C/g%3E%0A%3C/svg%3E');
+  background-repeat:repeat;
+  background-size:520px 220px;
+  opacity:1;
+  z-index:0;
+}
+/* Ensure app content is above watermark */
+.container{ position:relative; z-index:1; }
+
+/* Progress bar */
+.progress-wrap{
+  height:10px;
+  background:#f2f3f6;
+  border:1px solid var(--border);
+  border-radius:9999px;
+  overflow:hidden;
+  margin-top:8px;
+}
+.progress-bar{
+  height:100%;
+  width:0%;
+  background:linear-gradient(90deg, #cfd4dc, #aeb6c3 60%, #8f98a7 100%);
+  border-radius:9999px;
+  transition:width .25s ease;
+}
+.progress-text{ margin-top:6px; font-size:12px; color:var(--muted); text-align:right; }
+
+/* Header right controls: unified size & vertical alignment */
+.header .row{align-items:center}
+.header .row .chip,
+.header .row button{
+  height:36px;
+  padding:0 14px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:13px;
+  line-height:1;
+}
+.header .row .chip{background:var(--accent-soft);color:#a43c73;border:1px solid var(--border);border-radius:9999px}
+
+/* Chips in question header row */
+.card .chip{height:32px;display:inline-flex;align-items:center;line-height:1;padding:0 12px;font-size:12px}
+
+/* iOS portrait polish */
+@media (max-width: 640px) {
+  .container{padding:16px}
+  h1{font-size:28px}
+  .card{padding:16px;border-radius:20px}
+  .header .row{gap:8px;flex-wrap:wrap}
+  .header .row .chip,
+  .header .row button{height:44px;padding:0 16px;font-size:14px;border-radius:9999px}
+  .choices .choice{padding:16px;border-radius:14px}
+  .progress-wrap{height:12px}
+  #progressLabel{font-size:11px}
+  /* Make table scrollable horizontally if needed */
+  table{display:block;overflow-x:auto;white-space:nowrap}
+  /* Safe-area padding for bottom content */
+  body{padding-bottom:calc(env(safe-area-inset-bottom) + 8px)}
+  /* Watermark a bit lighter & larger spacing on small screens */
+  body::before{opacity:.8;background-size:560px 240px}
+}
+
+/* compact filters row */
+.filters-row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.filters-row .left,.filters-row .right{display:flex;gap:8px;flex-wrap:wrap}
+.filters-row .btn{height:36px;padding:0 14px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;border-radius:9999px;line-height:1}
+@media (max-width:640px){
+  .filters-row .left,.filters-row .right{width:100%;justify-content:space-between}
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+
+
+
+<style id="ios-tweaks-v10">
+/* Match the 'ghost' pill style used by “全部/错题” */
+/* Top-right chips + bottom I/O buttons */
+.header .row .chip,
+#ioPanel .btn {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  height:34px;
+  padding:0 14px;
+  border-radius:9999px;
+  background:#fff !important;
+  color:var(--text) !important;
+  border:1px solid var(--border) !important;
+  font-size:14px;
+  line-height:1;
+  font-weight:500;
+  box-shadow:none;
+  white-space:nowrap;
+}
+
+/* Special red version for 清空进度 ——只改边和字色，其他同款 */
+#ioPanel .btn.danger {
+  background:#fff !important;
+  color:#b91c1c !important;
+  border:1px solid #fecaca !important;
+}
+
+/* Bottom I/O layout: keep single line, scroll on narrow */
+#ioPanel .row {
+  display:flex !important;
+  flex-wrap:nowrap;
+  gap:8px !important;
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  padding-bottom:2px;
+  scrollbar-width:thin;
+}
+
+/* Threshold input inside chip */
+#thresholdChip input{
+  height:22px;
+  padding:1px 6px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  font-size:13px;
+}
+
+.header{ margin-bottom:28px !important; }
+h1{ margin:0; }
+
+/* iOS safe-area */
+@supports(padding:max(0px)){
+  body{
+    padding-left:max(0px, env(safe-area-inset-left));
+    padding-right:max(0px, env(safe-area-inset-right));
+  }
+}
+
+/* Portrait & Landscape */
+@media (orientation: portrait){
+  .container{ max-width:680px; padding-left:18px; padding-right:18px; }
+  .header .row{ width:100%; justify-content:flex-start; }
+  h1{ font-size:28px; }
+}
+@media (orientation: landscape){
+  .container{ max-width:1100px; }
+  .header .row{ justify-content:flex-end; }
+}
+
+
+
+
+<style id="theme-variants">
+/* ===== Default Background: 柔灰蓝 (Deeper) ===== */
+:root{
+  /* Deeper but still soft blue gradient */
+  --bg: linear-gradient(180deg, #d9e6ff 0%, #a6c1ff 100%);
+}
+/* Apply background globally */
+body{
+  background: var(--bg);
+  background-attachment: fixed;
+}
+
+/* Watermark balance (kept subtle) */
+body::before { opacity: .40; }
+@media (max-width:640px){
+  body::before { opacity: .32; }
+}
+
+/* iOS landscape compact spacing */
+@media (orientation: landscape) and (max-height: 500px){
+  .header{ margin-bottom: 16px !important; }
+  .card{ padding: 14px; }
+  #wordText{ font-size: 24px; }
+  .choices .choice{ padding: 12px; }
+}
+</style>
+
+
+
+</style>
+
+
+
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div><h1>VOCAB MASTER</h1></div>
+    <div class="row">
+      <div class="chip" id="libTotalChip">题库：0</div>
+      <div class="chip" id="libPoolChip">可出题：0</div>
+      <div class="chip" id="wrongCountChip">错题：0</div>
+      <div class="chip" id="thresholdChip">
+        连对：<input id="streakHide" type="number" min="1" max="50" value="5" style="width:64px;margin-left:6px;border:1px solid var(--border);border-radius:8px;padding:4px"/>
+      </div>
+      <!-- 保留一个隐藏占位，避免旧逻辑报错 -->
+      <div class="chip hidden" id="hiddenCountChip" style="display:none">不出题：0</div></div>
+  </div>
+
+  <!-- 首次使用引导 -->
+  <div id="onboard" class="card hidden" style="margin-top:16px;border:1px dashed var(--border)">
+    <div style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <div>
+        <div class="label">首次使用提示</div>
+        <div>未检测到本机题库。你可以：</div>
+        <ul style="margin:8px 0 0 18px;padding:0">
+          <li>点击 <strong>“粘贴导入（JSON/CSV）”</strong>；或</li>
+          <li>点击 <strong>“导入 Excel（.xlsx）”</strong> 上传你的单词表。</li>
+        </ul>
+      </div>
+      <div class="row">
+        <button class="btn ghost" id="clipImportBtn">从剪贴板导入（JSON）</button>
+        <button class="btn" id="openPasteBtn">打开“粘贴导入”</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 出题卡片 -->
+  <div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <div><div class="muted" id="posText">词性</div><div id="wordText" style="font-size:28px;font-weight:700">（请先导入题库）</div></div>
+      <div>
+        <div id="statBox" class="chip">答题 0 ｜ 错误 0 ｜ 错误率 0% ｜ 连对 0</div>
+        <div class="chip" id="modeProgress">全部模式进度：0 / 0</div>
+        <div class="progress-wrap"><div id="progressBar" class="progress-bar"></div></div>
+        <div id="progressLabel" class="progress-text">0%</div>
+      </div>
+    </div>
+    <div class="choices" id="choices"></div>
+    <div id="analysis" class="muted" style="margin-top:8px"></div>
+  </div>
+
+  <!-- 列表与筛选 -->
+  <div class="card" style="margin-top:16px">
+    <div class="filters-row">
+      <div class="left">
+        <button class="btn" id="modeAll">做全部</button>
+        <button class="btn ghost" id="modeWrong">只做错题</button>
+      </div>
+      <div class="right">
+        <button class="btn ghost" id="tblAll">全部</button>
+        <button class="btn ghost" id="tblWrong">错题</button>
+        <button class="btn ghost" id="tblHidden">不出题</button>
+      </div>
+    </div>
+
+    <div style="overflow:auto;max-height:360px;border:1px solid var(--border);border-radius:16px;margin-top:8px">
+      <table id="statsTable"><thead><tr><th>单词</th><th>释义</th><th>答题</th><th>错误</th><th>错误率</th><th>连续正确</th><th>状态</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <!-- 导入/导出（移动到页面最下方） -->
+  <div id="ioPanel" class="card" style="margin-top:16px">
+    <div class="row" style="gap:10px;flex-wrap:wrap">
+      <label class="btn ghost" for="excelInput">导入 Excel（.xlsx）</label>
+      <input id="excelInput" type="file" accept=".xlsx" style="display:none"/>
+      <button class="btn ghost" id="pasteImportBtn">粘贴导入（JSON/CSV）</button>
+      <button class="btn ghost" id="importProgressBtn">导入进度（JSON）</button>
+      <button class="btn ghost" id="exportProgressBtn">导出进度</button>
+      <button class="btn ghost" id="exportDataBtn">导出题库（JSON）</button>
+      <button class="btn danger" id="resetProgressBtn">清空进度</button>
+    </div>
+    <!-- 旧的灰字统计隐藏，但保留 DOM 以兼容旧逻辑 -->
+    <div class="muted" id="metaLine" style="display:none">当前题库：0 个；可出题：0 个；错题本：0 个；不出题：0 个</div>
+    <!-- 隐藏“本轮进度”，只为兼容旧逻辑不报错 -->
+    <div class="chip hidden" id="roundChip" style="display:none">本轮进度：0 / 0</div>
+  </div>
+
+</div>
+
+<script>
+// ---------- Storage & Data ----------
+const LS_DATA_KEY="vquiz:data", LS_STATS_KEY="vquiz:stats", LS_SETTINGS_KEY="vquiz:settings";
+let data=[], stats={}, settings={hideAfterStreak:5, mode:"all", tableFilter:"all"};
+
+// “分轮滚动”状态（不同做题模式独立）
+let rounds = {
+  all: { list: [], idx: 0, version: "" },
+  wrong: { list: [], idx: 0, version: "" }
+};
+
+// ---------- Helpers ----------
+const npos = s => (s||"").trim().toLowerCase();
+const valid = s => typeof s==="string" && s.trim().length>0;
+function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function wrongRateFor(w){ const s=stats[w]; return !s||!s.attempts?0:s.wrong/s.attempts; }
+function saveAll(){ localStorage.setItem(LS_DATA_KEY, JSON.stringify(data)); localStorage.setItem(LS_STATS_KEY, JSON.stringify(stats)); localStorage.setItem(LS_SETTINGS_KEY, JSON.stringify(settings)); renderMeta(); renderStatsTable(); updateOnboard(); updateProgressChips(); }
+function hashWords(arr){ return arr.map(x=>x.word).sort().join("|")+"#"+(settings.hideAfterStreak||5)+"#"+(settings.mode||"all"); }
+
+// ---------- Pools ----------
+function hiddenCount(){ return data.filter(it => (stats[it.word]?.streak||0) >= (settings.hideAfterStreak||5)).length; }
+function wrongCount(){ return data.filter(it => (stats[it.word]?.wrong||0)>0).length; }
+
+function getPoolForMode(mode){
+  const base = data.filter(it=>{ const s=stats[it.word]; return !(s && s.streak >= (settings.hideAfterStreak||5)); });
+  return mode==="wrong" ? base.filter(it => (stats[it.word]?.wrong||0)>0) : base;
+}
+
+// ---------- Rounds (per-mode cycle) ----------
+function ensureRound(mode){
+  const pool = getPoolForMode(mode);
+  const v = hashWords(pool);
+  const r = rounds[mode];
+  if (r.version !== v) {
+    const poolWords = pool.map(x=>x.word);
+    const prevList = Array.isArray(r.list) ? r.list.slice() : [];
+    const prevIdx = (typeof r.idx === 'number') ? r.idx : 0;
+    const remaining = prevList.slice(prevIdx).filter(w => poolWords.includes(w));
+    const newOnes = poolWords.filter(w => !prevList.includes(w));
+    const nextQueue = (remaining.length || newOnes.length) ? remaining.concat(shuffle(newOnes)) : shuffle(poolWords);
+    r.list = nextQueue;
+    r.idx = 0;
+    r.version = v;
+  }
+  return r;
+}
+
+function nextWordByRound(mode){
+  const r = ensureRound(mode);
+  const pool = getPoolForMode(mode);
+  if(pool.length===0) return null;
+  if(r.idx >= r.list.length){
+    r.list = shuffle(pool.map(x=>x.word));
+    r.idx = 0;
+  }
+  const w = r.list[r.idx];
+  r.idx += 1;
+  return data.find(x=>x.word===w) || null;
+}
+
+function roundProgress(mode){
+  const r = rounds[mode];
+  const total = getPoolForMode(mode).length;
+  const cur = Math.min(r.idx, total);
+  return {cur, total};
+}
+
+function updateProgressBar(){
+  const progEl = document.getElementById('progressBar');
+  const labelEl = document.getElementById('progressLabel');
+  if(!progEl || !labelEl) return;
+  const p = roundProgress(settings.mode);
+  const percent = p.total ? Math.round((Math.min(p.cur,p.total) / p.total) * 100) : 0;
+  progEl.style.width = percent + '%';
+  labelEl.textContent = percent + '%';
+}
+
+function syncHeaderChips(){
+  const total = data.length || 0;
+  const pool = getPoolForMode(settings.mode).length || 0;
+  const wrong = wrongCount();
+  const hidden = hiddenCount();
+  const thrEl = document.getElementById('streakHide');
+  const thr = Number(thrEl ? thrEl.value : settings.hideAfterStreak);
+  const t1 = document.getElementById('libTotalChip'); if(t1){ t1.textContent = '题库：' + total; }
+  const t2 = document.getElementById('libPoolChip');  if(t2){ t2.textContent = '可出题：' + pool; }
+  const t3 = document.getElementById('wrongCountChip'); if(t3){ t3.textContent = '错题：' + wrong; }
+  const t4 = document.getElementById('hiddenCountChip'); if(t4){ t4.textContent = '不出题：' + hidden; }
+  const t5 = document.getElementById('thresholdChip'); if(t5 && thrEl){ /* no text overwrite; the input显示即可 */ }
+}
+document.addEventListener('click', (e)=>{
+  if(e.target && e.target.id==='thresholdChip'){
+    const el = document.getElementById('streakHide');
+    if(el){ el.scrollIntoView({behavior:'smooth', block:'center'}); el.focus(); el.select(); }
+  }
+});
+
+// ---------- Render Meta & Table ----------
+function renderMeta(){
+  try{syncHeaderChips();}catch(e){}
+  const pool=getPoolForMode(settings.mode);
+  const wrong=wrongCount();
+  const hidden=hiddenCount();
+  const ml=document.getElementById('metaLine'); if(ml){ ml.textContent = `当前题库：${data.length} 个；可出题：${pool.length} 个；错题本：${wrong} 个；不出题：${hidden} 个`; }
+  const wc=document.getElementById('wrongCountChip'); if(wc){ wc.textContent = `错题：${wrong}`; }
+  const hc=document.getElementById('hiddenCountChip'); if(hc){ hc.textContent = `不出题：${hidden}`; }
+}
+
+function renderStatsTable(){
+  const tbody=document.querySelector('#statsTable tbody'); tbody.innerHTML='';
+  let rows = data.map(item=>{
+    const s=stats[item.word]||{attempts:0,wrong:0,streak:0};
+    return {word:item.word,pos:item.pos,meaning:item.meaning,attempts:s.attempts,wrong:s.wrong,wrongRate:s.attempts? s.wrong/s.attempts:0,streak:s.streak,hidden:s.streak>=(settings.hideAfterStreak||5),lastSeen:s.lastSeen||0};
+  });
+
+  if(settings.tableFilter==="wrong"){
+    rows = rows.filter(r=> (r.wrong||0)>0);
+  }else if(settings.tableFilter==="hidden"){
+    rows = rows.filter(r=> r.hidden);
+  }
+
+  rows.sort((a,b)=> b.wrongRate!==a.wrongRate? b.wrongRate-a.wrongRate : b.lastSeen-a.lastSeen);
+  for(const r of rows){
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td><strong>${r.word}</strong> ${r.pos?`<span class="muted">(${r.pos})</span>`:''}</td>
+    <td>${r.meaning||''}</td><td>${r.attempts||0}</td>
+    <td style="color:#b91c1c">${r.wrong||0}</td><td>${Math.round(r.wrongRate*100)}%</td>
+    <td style="color:#047857">${r.streak||0}</td><td class="muted">${r.hidden?'✅ 不出题':'可出题'}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+// ---------- Import / Export ----------
+function mapColumns(rows){
+  const norm = k => (k||'').toString().replace(/\s+/g,'').toLowerCase();
+  const c = {word:['word','单词'], pos:['pos','词性'], meaning:['meaning','中文含义（句子中）','中文含义','释义','中文义'], example:['example','ppt中原文引用（生词加粗）','原文引用','例句','ppt中原文引用（生词加粗）'], source:['source','来源']};
+  const pick = (obj, list) => { for(const k of Object.keys(obj)){ if(list.map(norm).includes(norm(k))) return obj[k]; } return ''; };
+  return rows.map(r=>({word:String(pick(r,c.word)||'').trim(), pos:String(pick(r,c.pos)||'').trim(), meaning:String(pick(r,c.meaning)||'').trim(), example:String(pick(r,c.example)||'').trim(), source:String(pick(r,c.source)||'').trim()})).filter(v=>v.word && v.meaning);
+}
+function mergeData(imported){
+  const map=new Map(data.map(d=>[d.word,d]));
+  for(const row of imported){ if(!row.word||!row.meaning) continue; const prev=map.get(row.word)||{}; map.set(row.word,Object.assign({},prev,row)); }
+  data=Array.from(map.values());
+  rounds.all.version = "";
+  rounds.wrong.version = "";
+  saveAll(); ensureQuestion();
+}
+document.getElementById('excelInput').addEventListener('change', e=>{
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const reader=new FileReader();
+  reader.onload=()=>{ try{
+      const arr=new Uint8Array(reader.result);
+      const wb=XLSX.read(arr,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]]; const json=XLSX.utils.sheet_to_json(ws,{defval:''});
+      const parsed=mapColumns(json);
+      if(!parsed.length){ alert('Excel 解析为空：请检查列名。'); return; }
+      mergeData(parsed); alert('成功导入 '+parsed.length+' 条。');
+    }catch(err){ console.error(err); alert('解析 Excel 失败。'); }
+    e.target.value='';
+  };
+  reader.readAsArrayBuffer(f);
+});
+document.getElementById('pasteImportBtn').addEventListener('click',()=>{
+  const text=prompt('粘贴 JSON 数组或 CSV（逗号分隔，首行为表头）'); if(!text) return;
+  let rows=[]; try{ const obj=JSON.parse(text); if(Array.isArray(obj)) rows=obj; }catch{}
+  if(!rows.length){ const lines=text.split(/\r?\n/).filter(Boolean); if(lines.length){ const header=lines[0].split(','); const idx=k=>header.findIndex(h=>h.trim().toLowerCase()===k); const w=idx('word'),m=idx('meaning'),e=idx('example'),p=idx('pos'),s=idx('source'); rows=lines.slice(1).map(line=>{ const cols=line.split(','); return {word:cols[w]||'', meaning:cols[m]||'', example:cols[e]||'', pos:cols[p]||'', source:cols[s]||''}; }); } }
+  const parsed=mapColumns(rows); if(!parsed.length) return alert('粘贴内容无法解析：请包含 word/meaning。'); mergeData(parsed); alert('成功导入 '+parsed.length+' 条。');
+});
+document.getElementById('importProgressBtn').addEventListener('click',()=>{
+  const text=prompt('粘贴导出的进度 JSON：'); if(!text) return;
+  try{ const obj=JSON.parse(text); if(obj&&obj.stats){ stats=obj.stats; settings=Object.assign(settings, obj.settings||{}); rounds.all.version=""; rounds.wrong.version=""; saveAll(); alert('进度已导入。'); } else alert('格式不对。'); }catch{ alert('解析失败：请粘贴导出的进度 JSON。'); }
+});
+document.getElementById('exportProgressBtn').addEventListener('click',()=>{
+  const blob=new Blob([JSON.stringify({stats,settings},null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='vocab-quiz-progress.json'; a.click(); URL.revokeObjectURL(url);
+});
+document.getElementById('exportDataBtn').addEventListener('click',()=>{
+  try{
+    const blob=new Blob([JSON.stringify({data},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='vocab-quiz-dataset.json';
+    a.click(); URL.revokeObjectURL(url);
+  }catch(err){ alert('导出失败：'+(err&&err.message?err.message:err)); }
+});
+document.getElementById('resetProgressBtn').addEventListener('click',()=>{ if(!confirm('确定清空所有学习进度？')) return; stats={}; rounds.all.version=""; rounds.wrong.version=""; saveAll(); ensureQuestion(); });
+
+// 做题模式切换（影响上面出题 & 进度）
+function setMode(mode){
+  settings.mode = mode;
+  ensureRound(mode);
+  saveAll();
+  document.getElementById('modeAll').className = mode==='all' ? 'btn' : 'btn ghost';
+  document.getElementById('modeWrong').className = mode==='wrong' ? 'btn' : 'btn ghost';
+  updateProgressChips();
+  ensureQuestion(true);
+}
+document.getElementById('modeAll').addEventListener('click',()=> setMode('all'));
+document.getElementById('modeWrong').addEventListener('click',()=> setMode('wrong'));
+
+// 表格筛选按钮（仅影响下方列表）
+function setTableFilter(kind){
+  settings.tableFilter = kind;
+  saveAll();
+  document.getElementById('tblAll').className = kind==='all' ? 'btn' : 'btn ghost';
+  document.getElementById('tblWrong').className = kind==='wrong' ? 'btn' : 'btn ghost';
+  document.getElementById('tblHidden').className = kind==='hidden' ? 'btn' : 'btn ghost';
+}
+document.getElementById('tblAll').addEventListener('click',()=> setTableFilter('all'));
+document.getElementById('tblWrong').addEventListener('click',()=> setTableFilter('wrong'));
+document.getElementById('tblHidden').addEventListener('click',()=> setTableFilter('hidden'));
+
+// 连对隐藏阈值（现在在右上角）
+document.getElementById('streakHide').addEventListener('change',e=>{
+  const n=Math.max(1,Number(e.target.value||5)); settings.hideAfterStreak=n; rounds.all.version=""; rounds.wrong.version=""; saveAll(); ensureQuestion(true);
+});
+
+// ---------- Question Loop ----------
+let curIndex=null, answerIdx=null, locked=false;
+
+function ensureQuestion(force=false){
+  const pool = getPoolForMode(settings.mode);
+  const wordEl=document.getElementById('wordText'), posEl=document.getElementById('posText'), choicesEl=document.getElementById('choices'), analysis=document.getElementById('analysis'), statEl=document.getElementById('statBox');
+  if(!pool.length){
+    wordEl.textContent='（没有可出题的单词：请导入题库或调整“连对”阈值）';
+    posEl.textContent='词性'; choicesEl.innerHTML=''; analysis.textContent=''; statEl.textContent='答题 0 ｜ 错误 0 ｜ 错误率 0% ｜ 连对 0';
+    updateProgressChips();
+    return;
+  }
+  if(force || curIndex===null){ nextQuestion(); }
+}
+
+function updateProgressChips(){
+  try{syncHeaderChips();}catch(e){}
+  try { updateProgressBar(); } catch(e){}
+  const {cur,total} = roundProgress(settings.mode);
+  const rc=document.getElementById('roundChip'); if(rc){ rc.textContent = `本轮进度：${Math.min(cur,total)} / ${total}`; }
+  const mp=document.getElementById('modeProgress'); if(mp){ mp.textContent = `${settings.mode==='all'?'全部':'错题'}模式进度：${Math.min(cur,total)} / ${total}`; }
+  renderMeta();
+}
+
+function buildWeightedPool(){
+  const base = getPoolForMode(settings.mode);
+  const weighted=[];
+  for(const item of base){
+    const s=stats[item.word]||{attempts:0,wrong:0,streak:0};
+    const w = (s.wrong>0? 3: 1) + (s.attempts===0? 1: 0);
+    for(let i=0;i<w;i++) weighted.push(item);
+  }
+  return weighted.length? weighted: base;
+}
+
+function pickSamePosMeanings(target, need){
+  const same = data.filter(d=>d.word!==target.word && npos(d.pos)===npos(target.pos) && valid(d.meaning));
+  const others = data.filter(d=>d.word!==target.word && npos(d.pos)!==npos(target.pos) && valid(d.meaning));
+  const pool = same.length>=need ? shuffle(same).slice(0,need) : shuffle(same).concat(shuffle(others)).slice(0,need);
+  const set=new Set(), out=[];
+  for(const it of pool){ if(valid(it.meaning) && it.meaning!==target.meaning && !set.has(it.meaning)){ set.add(it.meaning); out.push(it.meaning); if(out.length===need) break; } }
+  return out;
+}
+function highlight(example, word){
+  if(!valid(example)) return "（此单词暂无例句）";
+  const safe = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); const re = new RegExp('(' + safe + ')','gi');
+  return '例句：' + example.split(re).map(p => re.test(p) ? '<mark>'+p+'</mark>' : p).join('');
+}
+
+function renderQuestion(item){
+  const correct = item.meaning;
+  let distractors = pickSamePosMeanings(item,3);
+  if(distractors.length<3){
+    const any = shuffle(data.filter(d=>d.word!==item.word && valid(d.meaning))).map(d=>d.meaning);
+    for(const m of any){ if(distractors.length<3 && m!==correct && !distractors.includes(m)) distractors.push(m); }
+  }
+  const opts = shuffle([correct].concat(distractors)).slice(0,4);
+  const unique = []; const used=new Set();
+  for(const m of opts){ if(valid(m) && !used.has(m)){ unique.push(m); used.add(m); } }
+  while(unique.length<4){
+    const any = data[Math.floor(Math.random()*data.length)];
+    if(any && valid(any.meaning) && !used.has(any.meaning) && any.meaning!==correct){ unique.push(any.meaning); used.add(any.meaning); } else break;
+  }
+  if(unique.length<4) return false;
+
+  const wordEl=document.getElementById('wordText'), posEl=document.getElementById('posText'), choicesEl=document.getElementById('choices'), statEl=document.getElementById('statBox'), analysis=document.getElementById('analysis');
+  wordEl.textContent=item.word; posEl.textContent=item.pos||'词性';
+  const s=stats[item.word]||{attempts:0,wrong:0,streak:0};
+  statEl.textContent=`答题 ${s.attempts} ｜ 错误 ${s.wrong} ｜ 错误率 ${Math.round(wrongRateFor(item.word)*100)}% ｜ 连对 ${s.streak}`;
+  analysis.innerHTML='';
+  choicesEl.innerHTML='';
+  unique.forEach((txt,i)=>{
+    const btn=document.createElement('button');
+    btn.className='choice'; btn.dataset.index=i; btn.textContent=txt;
+    choicesEl.appendChild(btn);
+  });
+  answerIdx = unique.indexOf(correct); if(answerIdx<0){ answerIdx=0; choicesEl.children[0].textContent=correct; }
+  return true;
+}
+
+function nextQuestion(){
+  locked=false;
+  const item = nextWordByRound(settings.mode);
+  const wordEl=document.getElementById('wordText'), posEl=document.getElementById('posText'), choicesEl=document.getElementById('choices'), analysis=document.getElementById('analysis'), statEl=document.getElementById('statBox');
+  if(!item){
+    wordEl.textContent='（没有可出题的单词：请导入题库或调整“连对”阈值）';
+    posEl.textContent='词性'; choicesEl.innerHTML=''; analysis.textContent=''; statEl.textContent='答题 0 ｜ 错误 0 ｜ 错误率 0% ｜ 连对 0';
+    updateProgressChips();
+    return;
+  }
+  curIndex = data.findIndex(x=>x.word===item.word);
+  renderQuestion(item);
+  updateProgressChips();
+}
+
+function submitChoice(selectedIdx){
+  if(locked) return; locked=true;
+  const item = data[curIndex]; if(!item) return;
+  const isCorrect = (selectedIdx === answerIdx);
+  const s = stats[item.word] || {attempts:0,wrong:0,streak:0};
+  s.attempts += 1; if(isCorrect) s.streak += 1; else { s.wrong += 1; s.streak = 0; }
+  s.lastSeen = Date.now(); stats[item.word]=s; saveAll();
+
+  const choicesEl=document.getElementById('choices');
+  [...choicesEl.children].forEach((el,i)=>{
+    if (i === answerIdx) {
+      el.classList.add('correct');
+      el.style.fontWeight = '700';
+    } else if (i === selectedIdx) {
+      el.classList.add('wrong');
+    }
+  });
+  const analysis=document.getElementById('analysis');
+  analysis.innerHTML = (isCorrect?'<span style="color:#047857">✔ 回答正确</span>':'<span style="color:#b91c1c">✘ 回答错误</span>')
+    + ` &nbsp; 正确释义：<strong>${choicesEl.children[answerIdx].textContent}</strong><br>`
+    + highlight(item.example||'', item.word)
+    + `<div style="margin-top:8px"><button id="goNext" class="btn">下一题（Enter）</button></div>`;
+
+  if((stats[item.word]?.streak||0) >= (settings.hideAfterStreak||5)){
+    rounds.all.version=""; rounds.wrong.version="";
+  }
+}
+document.body.addEventListener('click', (e)=>{
+  const c = e.target.closest('.choice');
+  if(c && !locked){ const idx = Number(c.dataset.index); submitChoice(idx); }
+  if(e.target && e.target.id==='goNext'){ nextQuestion(); }
+});
+// 如果没有 nextBtn，就不绑定
+const nextBtnEl=document.getElementById('nextBtn'); if(nextBtnEl){ nextBtnEl.addEventListener('click', nextQuestion); }
+document.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ const go=document.getElementById('goNext'); if(go){ e.preventDefault(); nextQuestion(); } } });
+
+// ---------- Init ----------
+try{ const d=localStorage.getItem(LS_DATA_KEY); if(d) data=JSON.parse(d); }catch{}
+try{ const s=localStorage.getItem(LS_STATS_KEY); if(s) stats=JSON.parse(s); }catch{}
+try{ const t=localStorage.getItem(LS_SETTINGS_KEY); if(t) settings=Object.assign(settings, JSON.parse(t)); }catch{}
+if(typeof settings.hideAfterStreak!=='number') settings.hideAfterStreak=5;
+const thrElInit=document.getElementById('streakHide'); if(thrElInit){ thrElInit.value = settings.hideAfterStreak; }
+document.getElementById('tblAll').className = settings.tableFilter==='all' ? 'btn' : 'btn ghost';
+document.getElementById('tblWrong').className = settings.tableFilter==='wrong' ? 'btn' : 'btn ghost';
+document.getElementById('tblHidden').className = settings.tableFilter==='hidden' ? 'btn' : 'btn ghost';
+document.getElementById('modeAll').className = settings.mode==='all' ? 'btn' : 'btn ghost';
+document.getElementById('modeWrong').className = settings.mode==='wrong' ? 'btn' : 'btn ghost';
+renderMeta(); renderStatsTable(); updateOnboard(); ensureRound(settings.mode); nextQuestion();
+
+// ---------- Onboard & Clipboard ----------
+function updateOnboard(){
+  try{
+    const ob=document.getElementById('onboard');
+    if(!ob) return;
+    if(Array.isArray(data) && data.length>0){ ob.classList.add('hidden'); }
+    else { ob.classList.remove('hidden'); }
+  }catch{}
+}
+async function importFromClipboard(){
+  try{
+    if(!navigator.clipboard) return alert('此浏览器不支持读取剪贴板，请使用“粘贴导入”。');
+    const text = await navigator.clipboard.readText();
+    if(!text) return alert('剪贴板为空：请先复制 JSON 内容。');
+    let rows=[]; try{ const obj=JSON.parse(text); if(Array.isArray(obj)) rows=obj.data||obj; }catch{}
+    if(!rows.length){
+      const lines=text.split(/\r?\n/).filter(Boolean);
+      if(lines.length){
+        const header=lines[0].split(',');
+        const idx=k=>header.findIndex(h=>h.trim().toLowerCase()===k);
+        const w=idx('word'),m=idx('meaning'),e=idx('example'),p=idx('pos'),s=idx('source');
+        rows=lines.slice(1).map(line=>{ const cols=line.split(','); return {word:cols[w]||'', meaning:cols[m]||'', example:cols[e]||'', pos:cols[p]||'', source:cols[s]||''}; });
+      }
+    }
+    const parsed=mapColumns(rows);
+    if(!parsed.length) return alert('未能从剪贴板解析到题库：请确认复制的是 JSON/CSV。');
+    mergeData(parsed);
+    alert('成功导入 '+parsed.length+' 条。');
+    updateOnboard();
+  }catch(err){
+    alert('读取剪贴板失败：' + (err && err.message ? err.message : err));
+  }
+}
+document.addEventListener('click',(e)=>{
+  if(e.target && e.target.id==='clipImportBtn'){ importFromClipboard(); }
+  if(e.target && e.target.id==='openPasteBtn'){ document.getElementById('pasteImportBtn').click(); }
+});
+</script>
+</body>
+</html>
